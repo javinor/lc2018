@@ -46,31 +46,34 @@ import Partial.Unsafe (unsafePartial)
 type UnvalidatedForm =
   { emailAddress :: String
   , password     :: String
+  , nickname     :: String
   }
   
 type ValidatedForm =
   { emailAddress :: EmailAddress
   , password     :: Password
+  , nickname     :: NickName
   }
   
 validateForm
   :: UnvalidatedForm
   -> V (NonEmptyList InvalidField) ValidatedForm
-validateForm { emailAddress, password } = 
-  {emailAddress: _, password: _}
+validateForm { emailAddress, password, nickname } = 
+  {emailAddress: _, password: _, nickname: _}
   <$> (validateEmailAddress emailAddress)
   <*> (validatePassword password 0 60)
+  <*> (validateNickName nickname 10)
 
 --------------------------------------------------------------------------------
 main :: Eff (console :: CONSOLE) Unit
 main = do  
-  let validForm = { emailAddress: "alice@example.com", password: "GreatPassword" }
+  let validForm = { emailAddress: "alice@example.com", password: "GreatPassword", nickname: "qwe" }
   let validFormTest = validateForm validForm
   logShow (printValidation validFormTest)
   
   log "\n"
   
-  let invalidForm = { emailAddress: "example", password: "badpw" }
+  let invalidForm = { emailAddress: "example", password: "badpw", nickname: "qweqweqweqwe" }
   let invalidFormTest = validateForm invalidForm
   logShow (printValidation invalidFormTest)
   
@@ -83,10 +86,15 @@ newtype EmailAddress = EmailAddress String
 -- | Newtype wrapper for `String` indicating a valid password
 newtype Password = Password String
 
+-- | Newtype wrapper for `String` indicating a valid nickname
+newtype NickName = NickName String
+
+
 -- | Type of validation errors encountered when validating form fields
 data InvalidField
   = InvalidEmailAddress (NonEmptyList InvalidPrimitive)
  	| InvalidPassword     (NonEmptyList InvalidPrimitive)
+ 	| InvalidNickName     (NonEmptyList InvalidPrimitive)
 
 validateEmailAddress 
   :: String 
@@ -108,6 +116,16 @@ validatePassword input minLength maxLength =
            *> validateContainsMixedCase input
            *> (validateLength input minLength maxLength)
      in bimap (singleton <<< InvalidPassword) Password result
+
+validateNickName
+  :: String 
+  -> Int
+  -> V (NonEmptyList InvalidField) NickName
+validateNickName input maxLength =
+      let result = 
+              validateNonEmpty input
+            *> validateMaximumLength input maxLength
+      in bimap (singleton <<< InvalidNickName) NickName result
 
 --------------------------------------------------------------------------------
 -- TYPES AND FUNCTIONS FOR PRIMITIVE VALIDATIONS
@@ -229,9 +247,15 @@ instance showEmailAddress :: Show EmailAddress where show = unwrap
 derive instance newtypePassword :: Newtype Password _
 instance showPassword :: Show Password where show = unwrap
 
+-- | Manually derive a `Show` instance for `NickName` so it prints nicely
+derive instance newtypeNickName :: Newtype NickName _
+instance showNickName :: Show NickName where show = unwrap
+
+
 -- | Manually derive a `Show` instance for `InvalidField` that pretty prints the
 -- | `NonEmptyList`s as `Array`s
 instance showInvalidField :: Show InvalidField where
   show = case _ of
     InvalidEmailAddress errs -> "(InvalidEmailAddress " <> (show (fromFoldable errs)) <> ")"
     InvalidPassword     errs -> "(InvalidPassword "     <> (show (fromFoldable errs)) <> ")"
+    InvalidNickName     errs -> "(InvalidNickName "     <> (show (fromFoldable errs)) <> ")"
